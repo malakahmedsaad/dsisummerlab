@@ -14,47 +14,64 @@ def get_embeddings(texts):
     return embeddings.numpy()
 
 def cosine_similarity(a, b):
+    # Check for zero vectors to avoid division by zero errors
+    if np.all(a == 0) or np.all(b == 0):
+        return 0.0
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
 # Define file paths
 movie_annotations_path = 'C:/Users/mohamedm/Networkintegration/filmfestival/data/fmri/templates/filmfest_annotations_KG.csv'
 recall_folder_path = 'C:/Users/mohamedm/Networkintegration/filmfestival/data/fmri/templates/1_transcripts'
-output_path = 'C:/Users/mohamedm/Networkintegration/filmfestival/data/fmri/templates/annotation_similarities.csv'
+output_path = 'C:/Users/mohamedm/Networkintegration/filmfestival/data/fmri/templates/annotation_similarities_zeros.csv'
 
 # Load the movie annotations
 movie_annotations_df = pd.read_csv(movie_annotations_path)
-movie_annotations = movie_annotations_df['annotation'].dropna().tolist()
 
-# Get movie annotations embeddings
-movie_annotation_embeddings = get_embeddings(movie_annotations)
+# Check the columns of movie_annotations_df
+print("Movie annotations columns:", movie_annotations_df.columns)
 
 # Initialize a list to store similarities for each subject
 all_similarities = []
 
 # Process each recall transcript CSV file
-for recall_file in os.listdir(recall_folder_path):
-    if recall_file.endswith('.csv'):
-        recall_path = os.path.join(recall_folder_path, recall_file)
+for subject_number in range(1, 21):
+    recall_file = f'sub-{subject_number:02d}_recall_concat.csv'
+    recall_path = os.path.join(recall_folder_path, recall_file)
+
+    if os.path.exists(recall_path):
         recall_df = pd.read_csv(recall_path)
 
-        # Extract non-null transcripts from the recall annotations
-        recall_annotations = recall_df['transcript'].dropna().tolist()
+        # Check the columns of recall_df
+        print(f"Recall annotations columns for subject {subject_number}:", recall_df.columns)
 
-        # Get recall annotations embeddings
-        recall_annotation_embeddings = get_embeddings(recall_annotations)
+        # Merge movie annotations and recall annotations on event number
+        merged_df = pd.merge(movie_annotations_df, recall_df, left_on='event_number', right_on='events', how='inner')
 
-        # Compute cosine similarity between each movie and recall annotation
-        subject_similarities = []
-        for movie_index, movie_embedding in enumerate(movie_annotation_embeddings):
-            for recall_index, recall_embedding in enumerate(recall_annotation_embeddings):
+        # Check the columns of merged_df
+        print(f"Merged dataframe columns for subject {subject_number}:", merged_df.columns)
+
+        # Iterate through the merged dataframe and compute cosine similarities
+        for _, row in merged_df.iterrows():
+            movie_annotation = row['annotation']  # Use the correct column name for movie annotations
+            recall_annotation = row['transcript']  # Use the correct column name for recall annotations
+
+            # Skip computation if recall_annotation is NaN
+            if pd.isnull(recall_annotation):
+                similarity = 0.0
+            else:
+                # Get embeddings
+                movie_embedding = get_embeddings([movie_annotation])[0]
+                recall_embedding = get_embeddings([recall_annotation])[0]
+
+                # Compute similarity
                 similarity = cosine_similarity(movie_embedding, recall_embedding)
-                # Append result to the list
-                all_similarities.append({
-                    'subject': recall_file.split('_')[0],
-                    'movie_annotation_index': movie_index + 1,
-                    'recall_annotation_index': recall_index + 1,
-                    'similarity': similarity
-                })
+
+            # Append result to the list
+            all_similarities.append({
+                'subject': f'sub-{subject_number:02d}',
+                'event_number': row['event_number'],
+                'similarity': similarity
+            })
 
 # Convert the list to a DataFrame
 similarities_df = pd.DataFrame(all_similarities)
