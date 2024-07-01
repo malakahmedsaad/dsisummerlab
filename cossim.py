@@ -20,9 +20,9 @@ def cosine_similarity(a, b):
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
 # Define file paths
-movie_annotations_path = 'C:/Users/mohamedm/Networkintegration/filmfestival/data/fmri/templates/filmfest_annotations_KG.csv'
-recall_folder_path = 'C:/Users/mohamedm/Networkintegration/filmfestival/data/fmri/templates/1_transcripts'
-output_path = 'C:/Users/mohamedm/Networkintegration/filmfestival/data/fmri/templates/annotation_similarities_zeros.csv'
+movie_annotations_path = 'C:/Users/mohamedm/Networkintegration/sherlock/data/fmri/templates/Sherlock_annotations_by_events.csv'
+recall_folder_path = 'C:/Users/mohamedm/Networkintegration/sherlock/data/fmri/templates/recall_transcripts_clean'
+output_path = 'C:/Users/mohamedm/Networkintegration/sherlock/data/fmri/templates/annotation_similarities_zeros.csv'
 
 # Load the movie annotations
 movie_annotations_df = pd.read_csv(movie_annotations_path)
@@ -34,8 +34,8 @@ print("Movie annotations columns:", movie_annotations_df.columns)
 all_similarities = []
 
 # Process each recall transcript CSV file
-for subject_number in range(1, 21):
-    recall_file = f'sub-{subject_number:02d}_recall_concat.csv'
+for subject_number in range(1, 18):
+    recall_file = f'sub-{subject_number:02d}_recall_transcript.csv'
     recall_path = os.path.join(recall_folder_path, recall_file)
 
     if os.path.exists(recall_path):
@@ -45,14 +45,14 @@ for subject_number in range(1, 21):
         print(f"Recall annotations columns for subject {subject_number}:", recall_df.columns)
 
         # Merge movie annotations and recall annotations on event number
-        merged_df = pd.merge(movie_annotations_df, recall_df, left_on='event_number', right_on='events', how='inner')
+        merged_df = pd.merge(movie_annotations_df, recall_df, left_on='event', right_on='events', how='inner')
 
         # Check the columns of merged_df
         print(f"Merged dataframe columns for subject {subject_number}:", merged_df.columns)
 
         # Iterate through the merged dataframe and compute cosine similarities
         for _, row in merged_df.iterrows():
-            movie_annotation = row['annotation']  # Use the correct column name for movie annotations
+            movie_annotation = row['annotations']  # Use the correct column name for movie annotations
             recall_annotation = row['transcript']  # Use the correct column name for recall annotations
 
             # Skip computation if recall_annotation is NaN
@@ -69,7 +69,7 @@ for subject_number in range(1, 21):
             # Append result to the list
             all_similarities.append({
                 'subject': f'sub-{subject_number:02d}',
-                'event_number': row['event_number'],
+                'event': row['event'],
                 'similarity': similarity
             })
 
