@@ -8,25 +8,20 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 import submitit  # Importing submitit for SLURM job submission
 
-def process_annotations(path_to_csv: str, output_path: str, model_path: str):
+def process_annotations(path_to_csv: str, output_path: str, model_path: str, subject_id: str):
     """ Process arousal annotations and save ratings to CSV """
 
     # Define paths and filenames
-    annot_csv = "filmfest_annotations_KG.csv"  ## input file
-    ratings_csv = "filmfest_arousal_ratings_new.csv"  ## output file
+    annot_csv = f"sub-{subject_id}_recall_concat.csv"  ## input file
+    ratings_csv = f"sub-{subject_id}_arousal_ratings.csv"  ## output file
     filename = os.path.join(path_to_csv, annot_csv)
     savefile = os.path.join(output_path, ratings_csv)
 
     # Get annotation csv
     df = pd.read_csv(filename)
-    df = df.dropna(subset=['event_number'])  ## drop rows with NAN in the column subset
-
-    # Define number of raters/subjects
-    #raters = [1, 2, 3, 4, 5, 6, 7]
-    raters = [1]
+    df = df.dropna(subset=['transcript'])  ## drop rows with NAN in the column subset
 
     # Define column names
-    #column_name = ['event_number', 'rater_1', 'rater_2', 'rater_3', 'rater_4', 'rater_5', 'rater_6', 'rater_7']
     column_name = ['event_number', 'rater_1']
 
     # Define input prompt
@@ -55,36 +50,35 @@ def process_annotations(path_to_csv: str, output_path: str, model_path: str):
         for index, row in df.iterrows():
             dict_row = {"event_number": row['event_number']}
 
-            # For each rater:
-            for rater in raters:
-                thisEvent = row['event_number']
-                print(f"[+] Rater {rater}. Processing event number: {thisEvent}")
+            # Fetch annotation for this event
+            thisEvent = row['events']
+            print(f"[+] Processing event number: {thisEvent}")
 
-                # Fetch annotation for this event
-                thisScene = row['annotation']
+            # Fetch annotation for this event
+            thisScene = row['transcript']
 
-                system_prompt = "### System:\nYou are Stable Beluga 13B, an AI that follows instructions extremely well. \
-                Help as much as you can. Remember, be safe, and don't do anything illegal.\n\n"
-                message = f"{msg} \nScene: {thisScene}"
-                thisMessageLength = round(len(message))
+            system_prompt = "### System:\nYou are Stable Beluga 13B, an AI that follows instructions extremely well. \
+            Help as much as you can. Remember, be safe, and don't do anything illegal.\n\n"
+            message = f"{msg} \nScene: {thisScene}"
+            thisMessageLength = round(len(message))
 
-                prompt = f"{system_prompt}### User: {message}\n\n### Assistant:\n"
-                inputs = tokenizer(prompt, return_tensors="pt")
-                output = my_model.generate(**inputs, do_sample=True, top_p=0.85, top_k=0, max_length=thisMessageLength)
+            prompt = f"{system_prompt}### User: {message}\n\n### Assistant:\n"
+            inputs = tokenizer(prompt, return_tensors="pt")
+            output = my_model.generate(**inputs, do_sample=True, top_p=0.85, top_k=0, max_length=thisMessageLength)
 
-                # Print inputs and outputs
-                print(tokenizer.decode(output[0], skip_special_tokens=True))
-                result = tokenizer.decode(output[0], skip_special_tokens=True)
+            # Print inputs and outputs
+            print(tokenizer.decode(output[0], skip_special_tokens=True))
+            result = tokenizer.decode(output[0], skip_special_tokens=True)
 
-                # Grab arousal rating from the output
-                arousal = re.findall(r'### Assistant:\s*(.*?)\s*(?=###|$)', result, re.DOTALL)
+            # Grab arousal rating from the output
+            arousal = re.findall(r'### Assistant:\s*(.*?)\s*(?=###|$)', result, re.DOTALL)
 
-                # Make sure there is only one rating in the output
-                assert len(arousal) == 1
+            # Make sure there is only one rating in the output
+            assert len(arousal) == 1
 
-                # Convert output to int
-                a_rating = ''.join(x for x in arousal if x.isdigit())
-                dict_row[f"rater_{rater}"] = a_rating
+            # Convert output to int
+            a_rating = ''.join(x for x in arousal if x.isdigit())
+            dict_row["rater_1"] = a_rating
 
             # Append rating to csv
             dict_ratings.writerow(dict_row)
@@ -98,18 +92,23 @@ def main(query_file):
 
     # Get parameters from query
     path_to_csv = query.get("path_to_csv")
-    output_directory = Path("results").resolve()
+    output_directory = Path(query.get("output_directory")).resolve()
     model_path = query.get("model_path")
+
+    # Create the output directory if it does not exist
+    os.makedirs(output_directory, exist_ok=True)
 
     # Initialize submitit executor
     executor = submitit.AutoExecutor(folder=output_directory)
     executor.update_parameters(**query.get("slurm", {}))
 
-    # Submit job using submitit
-    if query.get("submitit", False):
-        executor.submit(process_annotations, path_to_csv, str(output_directory), model_path)
-    else:
-        process_annotations(path_to_csv, str(output_directory), model_path)
+    # Submit job using submitit for each subject
+    for subject_id in range(1):
+        subject_id_str = f"{subject_id:02}"  # Format as two-digit string
+        if query.get("submitit", False):
+            executor.submit(process_annotations, path_to_csv, str(output_directory), model_path, subject_id_str)
+        else:
+            process_annotations(path_to_csv, str(output_directory), model_path, subject_id_str)
 
 if __name__ == "__main__":
     import argparse
@@ -127,3 +126,10 @@ if __name__ == "__main__":
 
     # Call main function with query file
     main(query_path)
+    # "slurm": {
+    #     "slurm_partition": "general",
+    #     "slurm_job_name": "sample",
+    #     "slurm_nodes": 1,
+    #     "slurm_time": "5:00",
+    #     "slurm_gres": "gpu:1"
+    # }
