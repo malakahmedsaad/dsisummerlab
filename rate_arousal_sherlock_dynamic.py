@@ -8,11 +8,12 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 import submitit  # Importing submitit for SLURM job submission
 
+
 def process_annotations(path_to_csv: str, output_path: str, model_path: str, subject_id: str):
     """ Process arousal annotations and save ratings to CSV """
 
     # Define paths and filenames
-    annot_csv = f"sub-{subject_id}_recall_concat.csv"  ## input file
+    annot_csv = f"sub-{subject_id}_recall_transcript.csv"     ## input file
     ratings_csv = f"sub-{subject_id}_arousal_ratings.csv"  ## output file
     filename = os.path.join(path_to_csv, annot_csv)
     savefile = os.path.join(output_path, ratings_csv)
